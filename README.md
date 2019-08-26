@@ -5,7 +5,7 @@
 |-----|--------|----|------------|-----------|--------------|----|--|----|----|---|---|---|----|
 |Faster-SyncBN|R101v2-C4|C5-256ROI|no|80|1X|no|38.6|-|-|-|-|-|[model](https://simpledet-model.oss-cn-beijing.aliyuncs.com/faster_r101v2c4_c5_256roi_syncbn_1x.zip)|
 |Faster-SyncBN|R101v2-C4|C5-256ROI|yes|83|1X|yes|39.3|59.9|42.3|21.0|44.1|53.3|-|
-|Trident*|R101v2-C4|C5-256ROI|yes|83|1X|yes|44.0|64.9|48.4|29.0|47.8|57.6|-|
+|Trident*|R101v2-C4|C5-128ROI|yes|83|1X|yes|44.0|64.9|48.4|29.0|47.8|57.6|-|
 
 ---
 ## GroupSoftmax Cross Entropy Loss Function
