@@ -1,5 +1,6 @@
 # GroupSoftmax-SimpleDet
 ![](./doc/image/demo83.jpg)
+
 |Model|Backbone|Head|GroupSoftmax|Num Classes|Train Schedule|FP16|AP|AP50|AP75|APs|APm|APl|Link|
 |-----|--------|----|------------|-----------|--------------|----|--|----|----|---|---|---|----|
 |Faster-SyncBN|R101v2-C4|C5-256ROI|no|80|1X|no|38.6|-|-|-|-|-|[model](https://simpledet-model.oss-cn-beijing.aliyuncs.com/faster_r101v2c4_c5_256roi_syncbn_1x.zip)|
