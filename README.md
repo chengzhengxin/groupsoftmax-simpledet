@@ -1,3 +1,27 @@
+# GroupSoftmax-SimpleDet
+![](./doc/image/demo83.jpg)
+|Model|Backbone|Head|GroupSoftmax|Num Classes|Train Schedule|FP16|AP|AP50|AP75|APs|APm|APl|Link|
+|-----|--------|----|------------|-----------|--------------|----|--|----|----|---|---|---|----|
+|Faster-SyncBN|R101v2-C4|C5-256ROI|no|80|1X|no|38.6|-|-|-|-|-|[model](https://simpledet-model.oss-cn-beijing.aliyuncs.com/faster_r101v2c4_c5_256roi_syncbn_1x.zip)|
+|Faster-SyncBN|R101v2-C4|C5-256ROI|yes|83|1X|yes|39.3|59.9|42.3|21.0|44.1|53.3|-|
+|Trident*|R101v2-C4|C5-256ROI|yes|83|1X|yes|44.0|64.9|48.4|29.0|47.8|57.6|-|
+
+---
+## GroupSoftmax Cross Entropy Loss Function
+GroupSoftmax cross entropy loss function is implemented for training with multiple different benchmark datasets. We trained a 83 classes detection model by using COCO and CCTSDB.
+
+---
+## GroupSoftmax交叉熵损失函数
+GroupSoftmax交叉熵损失函数能够支持不同标注标准的数据集进行联合训练，在工业界的实际生产环境中，能够有效解决下面四个问题
+- 在不重新标注原有数据的情况下，对新的标注数据，增加某些新的类别
+- 在不重新标注原有数据的情况下，对新的标注数据，修改原有的类别标准，比如将某个类别拆分成新的几个类别
+- 已标注数据集中，出现概率较高的类别一般属于简单样本，对新的数据只标注出现概率较低的类别，能够显著降低标注成本
+- 在标注大型目标检测数据集时，只标注矩形框，而不选择类别属性，能够有效降低标注成本
+
+我们利用GroupSoftmax交叉熵损失函数在COCO和CCTSDB数据集上进行了联合训练，得到了一个83类检测器。有趣的是，模型不仅有83类检测效果，在coco_minival2014测试集上的表现比原来80类检测器反而会好一些。也就是说我们利用了一个与COCO无关的CCTSDB数据集，在相同参数下，Faster RCNN算法的检测效果由原来的38.6提高到了39.3，提高了0.7个点。为了验证GroupSoftmax交叉熵损失函数的有效性，我们同时训练了一个83类Trident*模型，最后在coco_minival2014测试集上mAP指标为44.0，所以从理论上而言，利用GroupSoftmax交叉熵损失函数，你可以无限添加不同标注标准的数据集，进行联合训练。
+### [GroupSoftmax交叉熵损失函数详解见知乎]()
+
+---
 ## SimpleDet - A Simple and Versatile Framework for Object Detection and Instance Recognition
 ### Major Features
 ![](./doc/image/diagram.png)
