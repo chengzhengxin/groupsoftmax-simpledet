@@ -20,7 +20,7 @@ GroupSoftmax交叉熵损失函数能够支持不同标注标准的数据集进�
 - 在标注大型目标检测数据集时，只标注矩形框，而不选择类别属性，能够有效降低标注成本
 
 我们利用GroupSoftmax交叉熵损失函数在COCO和CCTSDB数据集上进行了联合训练，得到了一个83类检测器。有趣的是，模型不仅有83类检测效果，在coco_minival2014测试集上的表现比原来80类检测器反而会好一些。也就是说我们利用了一个与COCO无关的CCTSDB数据集，在相同参数下，Faster RCNN算法的检测效果由原来的38.6提高到了39.3，提高了0.7个点。为了验证GroupSoftmax交叉熵损失函数的有效性，我们同时训练了一个83类Trident*模型，最后在coco_minival2014测试集上mAP指标为44.0，所以从理论上而言，利用GroupSoftmax交叉熵损失函数，你可以无限添加不同标注标准的数据集，进行联合训练。
-### [GroupSoftmax交叉熵损失函数详解见知乎]()
+### [GroupSoftmax交叉熵损失函数详解见知乎](https://zhuanlan.zhihu.com/p/73162940)
 
 ---
 ## SimpleDet - A Simple and Versatile Framework for Object Detection and Instance Recognition
