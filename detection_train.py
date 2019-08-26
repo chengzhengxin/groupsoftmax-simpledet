@@ -241,23 +241,28 @@ def train_net(config):
     if profile:
         mx.profiler.set_config(profile_all=True, filename=os.path.join(save_path, "profile.json"))
 
-    # train
-    mod.fit(
-        train_data=train_data,
-        eval_metric=eval_metrics,
-        epoch_end_callback=epoch_end_callback,
-        batch_end_callback=batch_end_callback,
-        kvstore=kv,
-        optimizer=pOpt.optimizer.type,
-        optimizer_params=optimizer_params,
-        initializer=init,
-        allow_missing=True,
-        arg_params=arg_params,
-        aux_params=aux_params,
-        begin_epoch=begin_epoch,
-        num_epoch=end_epoch,
-        profile=profile
-    )
+    try:
+        # train
+        mod.fit(
+            train_data=train_data,
+            eval_metric=eval_metrics,
+            epoch_end_callback=epoch_end_callback,
+            batch_end_callback=batch_end_callback,
+            kvstore=kv,
+            optimizer=pOpt.optimizer.type,
+            optimizer_params=optimizer_params,
+            initializer=init,
+            allow_missing=True,
+            arg_params=arg_params,
+            aux_params=aux_params,
+            begin_epoch=begin_epoch,
+            num_epoch=end_epoch,
+            profile=profile
+        )
+    except KeyboardInterrupt:
+        print("=================== KeyboardInterrupt ===================")
+        mod.savemodel(epoch=999, epoch_end_callback=epoch_end_callback)
+        pass
 
     logging.info("Training has done")
     time.sleep(10)

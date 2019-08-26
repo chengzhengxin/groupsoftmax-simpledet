@@ -61,24 +61,30 @@ class TridentAnchorTarget2D(AnchorTarget2D):
         valid_ranges = input_record["valid_ranges"]
         assert isinstance(gt_bbox, np.ndarray)
         assert gt_bbox.dtype == np.float32
-
+        assert gt_bbox.shape[1] == 5
         valid = np.where(gt_bbox[:, 0] != -1)[0]
-        gt_bbox = gt_bbox[valid]
-
-        if gt_bbox.shape[1] == 5:
-            gt_bbox = gt_bbox[:, :4]
+        gt_bbox  = gt_bbox[valid]
+        gt_class = gt_bbox[:, -1].copy()
+        gt_bbox  = gt_bbox[:, :4].copy()
 
         h, w = im_info[:2]
         if h >= w:
             fh, fw = p.generate.long, p.generate.short
         else:
             fh, fw = p.generate.short, p.generate.long
-
+        
+        valid_cls_label    = None
+        valid_anchor_label = None
         valid_index, valid_anchor = self._gather_valid_anchor(im_info)
-
-        valid_cls_label, valid_anchor_label = \
-            self._assign_label_to_anchor(valid_anchor, gt_bbox,
-                                         p.assign.neg_thr, p.assign.pos_thr, p.assign.min_pos_thr)
+        if p.generate.use_groupsoftmax:
+            gt_class = p.gtclass2rpn(gt_class)
+            valid_cls_label, valid_anchor_label = \
+                self._assign_label_to_anchor_group(valid_anchor, gt_bbox, gt_class,
+                                                   p.assign.neg_thr, p.assign.pos_thr, p.assign.min_pos_thr)
+        else:
+            valid_cls_label, valid_anchor_label = \
+                self._assign_label_to_anchor(valid_anchor, gt_bbox,
+                                             p.assign.neg_thr, p.assign.pos_thr, p.assign.min_pos_thr)
 
         cls_labels, reg_targets, reg_weights = [], [], []
         for valid_range in valid_ranges:

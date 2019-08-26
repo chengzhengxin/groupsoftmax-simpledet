@@ -4,6 +4,7 @@ import mxnet as mx
 import mxnext as X
 from utils.patch_config import patch_config_as_nothrow
 
+is_deploy = False
 
 class RPN(object):
     _rpn_output = None
@@ -16,7 +17,7 @@ class RPN(object):
         rpn_feat = backbone.get_rpn_feature()
         rpn_feat = neck.get_rpn_feature(rpn_feat)
 
-        rpn_loss = rpn_head.get_loss(rpn_feat, None, None)
+        rpn_loss = rpn_head.get_loss(rpn_feat, None, None, None)
 
         return X.group(rpn_loss)
 
@@ -48,6 +49,8 @@ class FasterRcnn(object):
     def get_train_symbol(cls, backbone, neck, rpn_head, roi_extractor, bbox_head):
         gt_bbox = X.var("gt_bbox")
         im_info = X.var("im_info")
+        rpn_group = X.var("rpn_group")
+        box_group = X.var("box_group")
 
         rpn_feat = backbone.get_rpn_feature()
         rcnn_feat = backbone.get_rcnn_feature()
@@ -55,10 +58,10 @@ class FasterRcnn(object):
         rcnn_feat = neck.get_rcnn_feature(rcnn_feat)
 
         rpn_head.get_anchor()
-        rpn_loss = rpn_head.get_loss(rpn_feat, gt_bbox, im_info)
+        rpn_loss = rpn_head.get_loss(rpn_feat, gt_bbox, im_info, rpn_group)
         proposal, bbox_cls, bbox_target, bbox_weight = rpn_head.get_sampled_proposal(rpn_feat, gt_bbox, im_info)
         roi_feat = roi_extractor.get_roi_feature(rcnn_feat, proposal)
-        bbox_loss = bbox_head.get_loss(roi_feat, bbox_cls, bbox_target, bbox_weight)
+        bbox_loss = bbox_head.get_loss(roi_feat, bbox_cls, box_group, bbox_target, bbox_weight)
 
         return X.group(rpn_loss + bbox_loss)
 
@@ -73,7 +76,11 @@ class FasterRcnn(object):
         roi_feat = roi_extractor.get_roi_feature_test(rcnn_feat, proposal)
         cls_score, bbox_xyxy = bbox_head.get_prediction(roi_feat, im_info, proposal)
 
-        return X.group([rec_id, im_id, im_info, cls_score, bbox_xyxy])
+        if is_deploy:
+            out = X.group([im_info, cls_score, bbox_xyxy])
+        else:
+            out = X.group([rec_id, im_id, im_info, cls_score, bbox_xyxy])
+        return out
 
     @classmethod
     def get_rpn_test_symbol(cls, backbone, neck, rpn_head):
@@ -110,6 +117,7 @@ class RpnHead(object):
             return self._cls_logit, self._bbox_delta
 
         p = self.p
+        num_class = p.num_class
         num_base_anchor = len(p.anchor_generate.ratio) * len(p.anchor_generate.scale)
         conv_channel = p.head.conv_channel
 
@@ -140,7 +148,7 @@ class RpnHead(object):
 
         cls_logit = X.conv(
             conv,
-            filter=2 * num_base_anchor,
+            filter=num_class * num_base_anchor,
             name="rpn_cls_logit",
             no_bias=False,
             init=X.gauss(0.01)
@@ -160,8 +168,9 @@ class RpnHead(object):
         return self._cls_logit, self._bbox_delta
 
 
-    def get_loss(self, conv_feat, gt_bboxes, im_infos):
+    def get_loss(self, conv_feat, gt_bboxes, im_infos, rpn_groups):
         p = self.p
+        num_class = p.num_class
         batch_image = p.batch_image
         image_anchor = p.anchor_generate.image_anchor
 
@@ -176,19 +185,34 @@ class RpnHead(object):
         # classification loss
         cls_logit_reshape = X.reshape(
             cls_logit,
-            shape=(0, -4, 2, -1, 0, 0),  # (N,C,H,W) -> (N,2,C/2,H,W)
+            shape=(0, -4, num_class, -1, 0, 0),  # (N,C,H,W) -> (N,num_class,C/num_class,H,W)
             name="rpn_cls_logit_reshape"
         )
-        cls_loss = X.softmax_output(
-            data=cls_logit_reshape,
-            label=cls_label,
-            multi_output=True,
-            normalization='valid',
-            use_ignore=True,
-            ignore_label=-1,
-            grad_scale=1.0 * scale_loss_shift,
-            name="rpn_cls_loss"
-        )
+
+        cls_loss = None
+        if p.use_groupsoftmax:
+            cls_loss = mx.sym.contrib.GroupSoftmaxOutput(
+                data=cls_logit_reshape,
+                label=cls_label,
+                group=rpn_groups,
+                multi_output=True,
+                normalization='valid',
+                use_ignore=True,
+                ignore_label=-1,
+                grad_scale=1.0 * scale_loss_shift,
+                name="rpn_cls_loss"
+            )
+        else:
+            cls_loss = X.softmax_output(
+                data=cls_logit_reshape,
+                label=cls_label,
+                multi_output=True,
+                normalization='valid',
+                use_ignore=True,
+                ignore_label=-1,
+                grad_scale=1.0 * scale_loss_shift,
+                name="rpn_cls_loss"
+            )
 
         # regression loss
         reg_loss = X.smooth_l1(
@@ -210,6 +234,7 @@ class RpnHead(object):
             return self._proposal
 
         p = self.p
+        num_class = p.num_class
         rpn_stride = p.anchor_generate.stride
         anchor_scale = p.anchor_generate.scale
         anchor_ratio = p.anchor_generate.ratio
@@ -223,7 +248,7 @@ class RpnHead(object):
         # TODO: remove this reshape hell
         cls_logit_reshape = X.reshape(
             cls_logit,
-            shape=(0, -4, 2, -1, 0, 0),  # (N,C,H,W) -> (N,2,C/2,H,W)
+            shape=(0, -4, num_class, -1, 0, 0),  # (N,C,H,W) -> (N,num_class,C/num_class,H,W)
             name="rpn_cls_logit_reshape_"
         )
         cls_score = X.softmax(
@@ -251,7 +276,9 @@ class RpnHead(object):
             threshold=nms_thr,
             rpn_min_size=min_bbox_side,
             iou_loss=False,
-            output_score=True
+            output_score=True,
+            workspace=250 if not is_deploy else 15,
+            num_class=num_class
         )
 
         if p.use_symbolic_proposal is not None:
@@ -402,7 +429,7 @@ class BboxHead(object):
         )
         return cls_score, bbox_xyxy
 
-    def get_loss(self, conv_feat, cls_label, bbox_target, bbox_weight):
+    def get_loss(self, conv_feat, cls_label, box_groups, bbox_target, bbox_weight):
         p = self.p
         batch_roi = p.image_roi * p.batch_image
         batch_image = p.batch_image
@@ -413,13 +440,24 @@ class BboxHead(object):
         scale_loss_shift = 128.0 if p.fp16 else 1.0
 
         # classification loss
-        cls_loss = X.softmax_output(
-            data=cls_logit,
-            label=cls_label,
-            normalization='batch',
-            grad_scale=1.0 * scale_loss_shift,
-            name='bbox_cls_loss'
-        )
+        cls_loss = None
+        if p.use_groupsoftmax:
+            cls_loss = mx.sym.contrib.GroupSoftmaxOutput(
+                data=cls_logit,
+                label=cls_label,
+                group=box_groups,
+                normalization='batch',
+                grad_scale=1.0 * scale_loss_shift,
+                name='bbox_cls_loss'
+            )
+        else:
+            cls_loss = X.softmax_output(
+                data=cls_logit,
+                label=cls_label,
+                normalization='batch',
+                grad_scale=1.0 * scale_loss_shift,
+                name='bbox_cls_loss'
+            )
 
         # bounding box regression
         reg_loss = X.smooth_l1(

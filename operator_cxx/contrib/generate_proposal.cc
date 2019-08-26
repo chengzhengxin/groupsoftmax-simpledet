@@ -268,7 +268,7 @@ class GenProposalOp : public Operator{
     Tensor<cpu, 3> out = out_data[gen_proposal::kOut].get<cpu, 3, real_t>(s);
 
     int nbatch = scores.size(0);
-    int num_anchors = scores.size(1) / 2;
+    int num_anchors = scores.size(1) / param_.num_class;
     int height = scores.size(2);
     int width = scores.size(3);
     int count = num_anchors * height * width;
@@ -299,7 +299,7 @@ class GenProposalOp : public Operator{
             workspace_proposals[n][index][1] = anchors[index][1];
             workspace_proposals[n][index][2] = anchors[index][2];
             workspace_proposals[n][index][3] = anchors[index][3];
-            workspace_proposals[n][index][4] = scores[n][i + width * height * num_anchors][j][k];
+            workspace_proposals[n][index][4] = 1.0f - scores[n][i][j][k];
           }
         }
       }

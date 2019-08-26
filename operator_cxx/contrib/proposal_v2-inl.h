@@ -150,6 +150,7 @@ struct ProposalParam_v2 : public dmlc::Parameter<ProposalParam_v2> {
   bool iou_loss;
   uint64_t workspace;
   bool filter_scales;
+  int num_class;
 
   DMLC_DECLARE_PARAMETER(ProposalParam_v2) {
     float tmp[] = {0, 0, 0, 0};
@@ -179,6 +180,8 @@ struct ProposalParam_v2 : public dmlc::Parameter<ProposalParam_v2> {
     .describe("Workspace for proposal in MB, default to 256");
     DMLC_DECLARE_FIELD(filter_scales).set_default(false)
     .describe("Remove proposals outside valid scale ranges");
+    DMLC_DECLARE_FIELD(num_class).set_default(2)
+    .describe("The number of classes");
   }
 };
 
@@ -204,7 +207,7 @@ class ProposalProp_v2 : public OperatorProperty {
     const TShape &dshape = in_shape->at(proposal_v2::kClsProb);
     if (dshape.ndim() == 0) return false;
     Shape<4> bbox_pred_shape;
-    bbox_pred_shape = Shape4(dshape[0], dshape[1] * 2, dshape[2], dshape[3]);
+    bbox_pred_shape = Shape4(dshape[0], dshape[1] / param_.num_class * 4, dshape[2], dshape[3]);
     SHAPE_ASSIGN_CHECK(*in_shape, proposal_v2::kBBoxPred,
                        bbox_pred_shape);
     Shape<2> im_info_shape;

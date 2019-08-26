@@ -53,6 +53,7 @@ struct GenProposalParam : public dmlc::Parameter<GenProposalParam> {
   int feature_stride;
   bool iou_loss;
   uint64_t workspace;
+  int num_class;
 
   DMLC_DECLARE_PARAMETER(GenProposalParam) {
     DMLC_DECLARE_FIELD(rpn_pre_nms_top_n).set_default(6000)
@@ -66,6 +67,8 @@ struct GenProposalParam : public dmlc::Parameter<GenProposalParam> {
     .describe("Usage of IoU Loss");
     DMLC_DECLARE_FIELD(workspace).set_default(256)
     .describe("Workspace for proposal in MB, default to 256");
+    DMLC_DECLARE_FIELD(num_class).set_default(2)
+    .describe("The number of classes");
   }
 };
 
@@ -91,7 +94,7 @@ class GenProposalProp : public OperatorProperty {
     const TShape &dshape = in_shape->at(gen_proposal::kClsProb);
     if (dshape.ndim() == 0) return false;
     Shape<4> bbox_pred_shape;
-    bbox_pred_shape = Shape4(dshape[0], dshape[1] * 2, dshape[2], dshape[3]);
+    bbox_pred_shape = Shape4(dshape[0], dshape[1] / param_.num_class * 4, dshape[2], dshape[3]);
     SHAPE_ASSIGN_CHECK(*in_shape, gen_proposal::kBBoxPred,
                        bbox_pred_shape);
     Shape<2> im_info_shape;

@@ -38,11 +38,27 @@ class ReadRoiRecord(DetectionAugmentation):
         # TODO: remove this compatibility method
         input_record["gt_bbox"] = np.concatenate([input_record["gt_bbox"],
                                                   input_record["gt_class"].reshape(-1, 1)],
-                                                 axis=1)
-
+                                                  axis=1)
         # gt_dict = pkl.load(input_record["gt_url"])
         # for s in self.gt_select:
         #     input_record[s] = gt_dict[s]
+
+
+class GroupRead(DetectionAugmentation):
+    """
+    input:  dataset version, int
+    output: rpn_group
+            rpn_group
+    """
+    def __init__(self, pGroup):
+        super().__init__()
+        self.p = pGroup
+
+    def apply(self, input_record):
+        p = self.p
+
+        input_record["rpn_group"] = p.rpn_groups[input_record["version"]].copy()
+        input_record["box_group"] = p.box_groups[input_record["version"]].copy()
 
 
 class Norm2DImage(DetectionAugmentation):
@@ -478,17 +494,43 @@ class AnchorTarget2D(DetectionAugmentation):
             argmax_overlaps = np.zeros(shape=(num_anchor, ))
 
         return cls_label, argmax_overlaps
+    
+    def _assign_label_to_anchor_group(self, valid_anchor, gt_bbox, gt_class, neg_thr, pos_thr, min_pos_thr):
+        num_anchor = valid_anchor.shape[0]
+        cls_label = np.full(shape=(num_anchor,), fill_value=-1, dtype=np.float32)
+
+        if len(gt_bbox) > 0:
+            # num_anchor x num_gt
+            overlaps = bbox_overlaps_cython(valid_anchor.astype(np.float32, copy=False), gt_bbox.astype(np.float32, copy=False))
+            max_overlaps    = overlaps.max(axis=1)
+            argmax_overlaps = overlaps.argmax(axis=1)
+            gt_max_overlaps = overlaps.max(axis=0)
+            mask_label_map  = np.tile(gt_class.reshape(-1).astype(np.float32), num_anchor).reshape(num_anchor, -1)
+            max_overlaps_label = mask_label_map[np.arange(num_anchor), argmax_overlaps]
+            gt_argmax_overlaps = np.where((overlaps == gt_max_overlaps) & (overlaps >= min_pos_thr))
+            # anchor class
+            cls_label[max_overlaps < neg_thr] = 0
+            # fg label: for each gt, anchor with highest overlap
+            cls_label[gt_argmax_overlaps[0]] = mask_label_map[gt_argmax_overlaps]
+            # fg label: above threshold IoU
+            fg_label_idxs = np.where(max_overlaps >= pos_thr)[0]
+            cls_label[fg_label_idxs] = max_overlaps_label[fg_label_idxs]
+        else:
+            cls_label[:] = 0
+            argmax_overlaps = np.zeros(shape=(num_anchor, ))
+
+        return cls_label, argmax_overlaps
 
     def _sample_anchor(self, label, num, fg_fraction):
         num_fg = int(fg_fraction * num)
-        fg_inds = np.where(label == 1)[0]
+        fg_inds = np.where(label >= 1)[0]
         if len(fg_inds) > num_fg:
             disable_inds = np.random.choice(fg_inds, size=(len(fg_inds) - num_fg), replace=False)
             if self.DEBUG:
                 disable_inds = fg_inds[:(len(fg_inds) - num_fg)]
             label[disable_inds] = -1
 
-        num_bg = num - np.sum(label == 1)
+        num_bg = num - np.sum(label >= 1)
         bg_inds = np.where(label == 0)[0]
         if len(bg_inds) > num_bg:
             disable_inds = np.random.choice(bg_inds, size=(len(bg_inds) - num_bg), replace=False)
@@ -500,7 +542,7 @@ class AnchorTarget2D(DetectionAugmentation):
         num_anchor = valid_anchor.shape[0]
         reg_target = np.zeros(shape=(num_anchor, 4), dtype=np.float32)
         reg_weight = np.zeros(shape=(num_anchor, 4), dtype=np.float32)
-        fg_index = np.where(label == 1)[0]
+        fg_index = np.where(label >= 1)[0]
         if len(fg_index) > 0:
             reg_target[fg_index] = bbox_transform(valid_anchor[fg_index], gt_bbox[anchor_label[fg_index], :4])
             reg_weight[fg_index, :] = 1.0
@@ -537,16 +579,24 @@ class AnchorTarget2D(DetectionAugmentation):
         gt_bbox = input_record["gt_bbox"]
         assert isinstance(gt_bbox, np.ndarray)
         assert gt_bbox.dtype == np.float32
+        assert gt_bbox.shape[1] == 5
         valid = np.where(gt_bbox[:, 0] != -1)[0]
-        gt_bbox = gt_bbox[valid]
+        gt_bbox  = gt_bbox[valid]
+        gt_class = gt_bbox[:, -1].copy()
+        gt_bbox  = gt_bbox[:, :4].copy()
 
-        if gt_bbox.shape[1] == 5:
-            gt_bbox = gt_bbox[:, :4]
-
+        cls_label    = None
+        anchor_label = None
         valid_index, valid_anchor = self._gather_valid_anchor(im_info)
-        cls_label, anchor_label = \
-            self._assign_label_to_anchor(valid_anchor, gt_bbox,
-                                         p.assign.neg_thr, p.assign.pos_thr, p.assign.min_pos_thr)
+        if p.generate.use_groupsoftmax:
+            gt_class = p.gtclass2rpn(gt_class)
+            cls_label, anchor_label = \
+                self._assign_label_to_anchor_group(valid_anchor, gt_bbox, gt_class,
+                                                   p.assign.neg_thr, p.assign.pos_thr, p.assign.min_pos_thr)
+        else:
+            cls_label, anchor_label = \
+                self._assign_label_to_anchor(valid_anchor, gt_bbox,
+                                             p.assign.neg_thr, p.assign.pos_thr, p.assign.min_pos_thr)
         self._sample_anchor(cls_label, p.sample.image_anchor, p.sample.pos_fraction)
         reg_target, reg_weight = self._cal_anchor_target(cls_label, valid_anchor, gt_bbox, anchor_label)
         cls_label, reg_target, reg_weight = \

@@ -80,7 +80,7 @@ __global__ void ProposalGridKernel(const int count,
     proposals[index * 5 + 1] = proposals[a * 5 + 1] + h * feature_stride;
     proposals[index * 5 + 2] = proposals[a * 5 + 2] + w * feature_stride;
     proposals[index * 5 + 3] = proposals[a * 5 + 3] + h * feature_stride;
-    proposals[index * 5 + 4] = scores[(a * height + h) * width + w];
+    proposals[index * 5 + 4] = Dtype(1.0f) - scores[(a * height + h) * width + w];
   }
 }
 
@@ -443,7 +443,7 @@ class ProposalGPUOp : public Operator{
     uint64_t allocated_bytes_outside_loop = 0ULL;
 
     int nbatch = scores.size(0);
-    int num_anchors = scores.size(1) / 2;
+    int num_anchors = scores.size(1) / param_.num_class;
     int height = scores.size(2);
     int width = scores.size(3);
     int count = num_anchors * height * width;  // count of total anchors
@@ -480,11 +480,6 @@ class ProposalGPUOp : public Operator{
                                 sizeof(float) * cpu_im_info.size(),
                                 cudaMemcpyDeviceToHost)); // less than 64K
 
-    
-    Shape<3> fg_scores_shape = Shape3(in_data[proposal::kClsProb].shape_[1] / 2,
-                                      in_data[proposal::kClsProb].shape_[2], 
-                                      in_data[proposal::kClsProb].shape_[3]);
-
     allocated_bytes_outside_loop = allocated_bytes;
     /* copy anchors for all images in batch */
     for (int i = 0; i < nbatch; i++) {
@@ -500,9 +495,8 @@ class ProposalGPUOp : public Operator{
                                   sizeof(float) * anchors.size(),
                                   cudaMemcpyHostToDevice)); // less than 64K
 
-      /* get current batch foreground score */
-      float* foreground_score_ptr = reinterpret_cast<float *>(scores.dptr_) + i * 2 * count + fg_scores_shape.Size();
-      Tensor<xpu, 3> fg_scores = Tensor<xpu, 3>(foreground_score_ptr, fg_scores_shape);
+      /* get current batch background score */
+      float* bg_scores_ptr = reinterpret_cast<float *>(scores.dptr_) + i * param_.num_class * count;
 
       /* copy proposals to a mesh grid */
       dim3 dimGrid((count + kMaxThreadsPerBlock - 1) / kMaxThreadsPerBlock);
@@ -510,7 +504,7 @@ class ProposalGPUOp : public Operator{
       CheckLaunchParam(dimGrid, dimBlock, "ProposalGrid");
       ProposalGridKernel<<<dimGrid, dimBlock>>>(
         count, num_anchors, height, width, param_.feature_stride,
-        fg_scores.dptr_, batch_proposals);
+        bg_scores_ptr, batch_proposals);
       FRCNN_CUDA_CHECK(cudaPeekAtLastError());
 
       /* transform anchors and bbox_deltas into bboxes */

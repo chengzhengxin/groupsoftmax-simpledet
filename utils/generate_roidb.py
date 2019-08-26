@@ -12,7 +12,8 @@ dataset_split_mapping = {
     "minival2014": "val2014",
     "train2017": "train2017",
     "val2017": "val2017",
-    "test-dev2017": "test2017"
+    "test-dev2017": "test2017",
+    "train": "train"
 }
 
 
@@ -27,7 +28,19 @@ def parse_args():
 
 def generate_groundtruth_database(dataset_name, dataset_split):
     annotation_type = 'image_info' if 'test' in dataset_split else 'instances'
-    annotation_path = "data/%s/annotations/%s_%s.json" % (dataset_name, annotation_type, dataset_split)
+    annotation_path = "/ws/data/opendata/%s/annotations/%s_%s.json" % (dataset_name, annotation_type, dataset_split)
+
+    catid_offset = 0
+    lable_version = -1
+    if dataset_name == "coco":
+        lable_version = 1
+        catid_offset  = 0
+    elif dataset_name == "cctsdb":
+        lable_version = 2
+        catid_offset  = 80
+    else:
+        lable_version = -1
+    assert lable_version > 0
 
     dataset = COCO(annotation_path)
     img_ids = dataset.getImgIds()
@@ -61,20 +74,21 @@ def generate_groundtruth_database(dataset_name, dataset_split):
         gt_poly = [None] * num_instance
 
         for i, inst in enumerate(valid_instances):
-            cls = datasetid_to_trainid[inst['category_id']]
+            cls = catid_offset + datasetid_to_trainid[inst['category_id']]
             gt_bbox[i, :] = inst['clean_bbox']
             gt_class[i] = cls
             gt_poly[i] = inst['segmentation']
 
         split = dataset_split_mapping[dataset_split]
         roi_rec = {
-            'image_url': 'data/%s/images/%s/%s' % (dataset_name, split, im_filename),
+            'image_url': '/ws/data/opendata/%s/images/%s/%s' % (dataset_name, split, im_filename),
             'im_id': img_id,
             'h': im_h,
             'w': im_w,
             'gt_class': gt_class,
             'gt_bbox': gt_bbox,
             'gt_poly': gt_poly,
+            'version': lable_version,
             'flipped': False}
 
         roidb.append(roi_rec)

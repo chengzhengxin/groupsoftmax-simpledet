@@ -216,6 +216,8 @@ if __name__ == "__main__":
             final_dets = {}
 
             for cid in range(cls_score.shape[1]):
+                if cid >= 80:
+                    continue
                 score = cls_score[:, cid]
                 if bbox_xyxy.shape[1] != 4:
                     cls_box = bbox_xyxy[:, cid * 4:(cid + 1) * 4]

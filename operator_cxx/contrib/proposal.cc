@@ -321,7 +321,7 @@ class ProposalOp : public Operator{
     Tensor<cpu, 3> out_score = out_data[proposal::kScore].get<cpu, 3, real_t>(s);
 
     int nbatch = scores.size(0);
-    int num_anchors = scores.size(1) / 2;
+    int num_anchors = scores.size(1) / param_.num_class;
     int height = scores.size(2);
     int width = scores.size(3);
     int count = num_anchors * height * width;
@@ -370,7 +370,7 @@ class ProposalOp : public Operator{
             workspace_proposals[n][index][1] = workspace_proposals[n][i][1] + j * param_.feature_stride;
             workspace_proposals[n][index][2] = workspace_proposals[n][i][2] + k * param_.feature_stride;
             workspace_proposals[n][index][3] = workspace_proposals[n][i][3] + j * param_.feature_stride;
-            workspace_proposals[n][index][4] = scores[n][i + width * height * num_anchors][j][k];
+            workspace_proposals[n][index][4] = 1.0f - scores[n][i][j][k];
           }
         }
       }

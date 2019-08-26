@@ -1052,3 +1052,11 @@ class DetModule(BaseModule):
 
             # end of 1 epoch, reset the data-iter for another epoch
             train_data.reset()
+
+    def savemodel(self, epoch=999, epoch_end_callback=None):
+        # sync aux params across devices
+        arg_params, aux_params = self.get_params()
+        self.set_params(arg_params, aux_params)
+        if epoch_end_callback is not None and self._kvstore.rank == 0:
+            for callback in _as_list(epoch_end_callback):
+                callback(epoch, self.symbol, arg_params, aux_params)

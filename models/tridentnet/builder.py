@@ -10,6 +10,7 @@ from models.tridentnet.resnet_v1b import TridentResNetV1bBuilder
 from models.tridentnet.resnet_v1 import TridentResNetV1Builder
 from utils.patch_config import patch_config_as_nothrow
 
+is_deploy = False
 
 class TridentRPN(object):
     _rpn_output = None
@@ -62,14 +63,18 @@ class TridentFasterRcnn(object):
     def get_train_symbol(cls, backbone, neck, rpn_head, roi_extractor, bbox_head, num_branch, scaleaware):
         gt_bbox = X.var("gt_bbox")
         im_info = X.var("im_info")
+        rpn_group = X.var("rpn_group")
+        box_group = X.var("box_group")
         if scaleaware:
             valid_ranges = X.var("valid_ranges")
         rpn_cls_label = X.var("rpn_cls_label")
         rpn_reg_target = X.var("rpn_reg_target")
         rpn_reg_weight = X.var("rpn_reg_weight")
 
-        im_info = TridentResNetV2Builder.stack_branch_symbols([im_info] * num_branch)
-        gt_bbox = TridentResNetV2Builder.stack_branch_symbols([gt_bbox] * num_branch)
+        im_info   = TridentResNetV2Builder.stack_branch_symbols([im_info] * num_branch)
+        rpn_group = TridentResNetV2Builder.stack_branch_symbols([rpn_group] * num_branch)
+        box_group = TridentResNetV2Builder.stack_branch_symbols([box_group] * num_branch)
+        gt_bbox   = TridentResNetV2Builder.stack_branch_symbols([gt_bbox] * num_branch)
         if scaleaware:
             valid_ranges = X.reshape(valid_ranges, (-3, -2))
         rpn_cls_label = X.reshape(rpn_cls_label, (-3, -2))
@@ -81,13 +86,13 @@ class TridentFasterRcnn(object):
         rpn_feat = neck.get_rpn_feature(rpn_feat)
         rcnn_feat = neck.get_rcnn_feature(rcnn_feat)
 
-        rpn_loss = rpn_head.get_loss(rpn_feat, rpn_cls_label, rpn_reg_target, rpn_reg_weight)
+        rpn_loss = rpn_head.get_loss(rpn_feat, rpn_cls_label, rpn_group, rpn_reg_target, rpn_reg_weight)
         if scaleaware:
             proposal, bbox_cls, bbox_target, bbox_weight = rpn_head.get_sampled_proposal_with_filter(rpn_feat, gt_bbox, im_info, valid_ranges)
         else:
             proposal, bbox_cls, bbox_target, bbox_weight = rpn_head.get_sampled_proposal(rpn_feat, gt_bbox, im_info)
         roi_feat = roi_extractor.get_roi_feature(rcnn_feat, proposal)
-        bbox_loss = bbox_head.get_loss(roi_feat, bbox_cls, bbox_target, bbox_weight)
+        bbox_loss = bbox_head.get_loss(roi_feat, bbox_cls, box_group, bbox_target, bbox_weight)
 
         return X.group(rpn_loss + bbox_loss)
 
@@ -107,7 +112,11 @@ class TridentFasterRcnn(object):
         cls_score = X.reshape(cls_score, (-3, -2))
         bbox_xyxy = X.reshape(bbox_xyxy, (-3, -2))
 
-        return X.group([rec_id, im_id, im_info, cls_score, bbox_xyxy])
+        if is_deploy:
+            out = X.group([im_info, cls_score, bbox_xyxy])
+        else:
+            out = X.group([rec_id, im_id, im_info, cls_score, bbox_xyxy])
+        return out
 
     @classmethod
     def get_rpn_test_symbol(cls, backbone, neck, rpn_head, num_branch):
@@ -137,15 +146,19 @@ class TridentMaskRcnn(object):
         gt_bbox = X.var("gt_bbox")
         gt_poly = X.var("gt_poly")
         im_info = X.var("im_info")
+        rpn_group = X.var("rpn_group")
+        box_group = X.var("box_group")
         if scaleaware:
             valid_ranges = X.var("valid_ranges")
         rpn_cls_label = X.var("rpn_cls_label")
         rpn_reg_target = X.var("rpn_reg_target")
         rpn_reg_weight = X.var("rpn_reg_weight")
 
-        im_info = TridentResNetV2Builder.stack_branch_symbols([im_info] * num_branch)
-        gt_bbox = TridentResNetV2Builder.stack_branch_symbols([gt_bbox] * num_branch)
-        gt_poly = TridentResNetV2Builder.stack_branch_symbols([gt_poly] * num_branch)
+        im_info   = TridentResNetV2Builder.stack_branch_symbols([im_info] * num_branch)
+        rpn_group = TridentResNetV2Builder.stack_branch_symbols([rpn_group] * num_branch)
+        box_group = TridentResNetV2Builder.stack_branch_symbols([box_group] * num_branch)
+        gt_bbox   = TridentResNetV2Builder.stack_branch_symbols([gt_bbox] * num_branch)
+        gt_poly   = TridentResNetV2Builder.stack_branch_symbols([gt_poly] * num_branch)
         if scaleaware:
             valid_ranges = X.reshape(valid_ranges, (-3, -2))
         rpn_cls_label = X.reshape(rpn_cls_label, (-3, -2))
@@ -157,7 +170,7 @@ class TridentMaskRcnn(object):
         rpn_feat = neck.get_rpn_feature(rpn_feat)
         rcnn_feat = neck.get_rcnn_feature(rcnn_feat)
 
-        rpn_loss = rpn_head.get_loss(rpn_feat, rpn_cls_label, rpn_reg_target, rpn_reg_weight)
+        rpn_loss = rpn_head.get_loss(rpn_feat, rpn_cls_label, rpn_group, rpn_reg_target, rpn_reg_weight)
         if scaleaware:
             proposal, bbox_cls, bbox_target, bbox_weight, mask_proposal, mask_target = \
                 rpn_head.get_sampled_proposal_with_filter(rpn_feat, gt_bbox, gt_poly, im_info, valid_ranges)
@@ -167,7 +180,7 @@ class TridentMaskRcnn(object):
         roi_feat = roi_extractor.get_roi_feature(rcnn_feat, proposal)
         mask_roi_feat = mask_roi_extractor.get_roi_feature(rcnn_feat, mask_proposal)
 
-        bbox_loss = bbox_head.get_loss(roi_feat, bbox_cls, bbox_target, bbox_weight)
+        bbox_loss = bbox_head.get_loss(roi_feat, bbox_cls, box_group, bbox_target, bbox_weight)
         mask_loss = mask_head.get_loss(mask_roi_feat, mask_target)
 
         return X.group(rpn_loss + bbox_loss + mask_loss)
@@ -210,6 +223,7 @@ class TridentRpnHead(RpnHead):
             return self._proposal
 
         p = self.p
+        num_class = p.num_class
         rpn_stride = p.anchor_generate.stride
         anchor_scale = p.anchor_generate.scale
         anchor_ratio = p.anchor_generate.ratio
@@ -223,7 +237,7 @@ class TridentRpnHead(RpnHead):
         # TODO: remove this reshape hell
         cls_logit_reshape = X.reshape(
             cls_logit,
-            shape=(0, -4, 2, -1, 0, 0),  # (N,C,H,W) -> (N,2,C/2,H,W)
+            shape=(0, -4, num_class, -1, 0, 0),  # (N,C,H,W) -> (N,num_class,C/num_class,H,W)
             name="rpn_cls_logit_reshape_"
         )
         cls_score = X.softmax(
@@ -251,7 +265,8 @@ class TridentRpnHead(RpnHead):
             rpn_min_size=min_bbox_side,
             iou_loss=False,
             filter_scales=True,
-            output_score=True
+            output_score=True,
+            num_class=num_class
         )
 
         self._proposal = proposal
@@ -304,8 +319,9 @@ class TridentRpnHead(RpnHead):
 
         return bbox, label, bbox_target, bbox_weight
 
-    def get_loss(self, conv_feat, cls_label, bbox_target, bbox_weight):
+    def get_loss(self, conv_feat, cls_label, rpn_groups, bbox_target, bbox_weight):
         p = self.p
+        num_class = p.num_class
         batch_image = p.batch_image
         image_anchor = p.anchor_generate.image_anchor
 
@@ -316,19 +332,34 @@ class TridentRpnHead(RpnHead):
         # classification loss
         cls_logit_reshape = X.reshape(
             cls_logit,
-            shape=(0, -4, 2, -1, 0, 0),  # (N,C,H,W) -> (N,2,C/2,H,W)
+            shape=(0, -4, num_class, -1, 0, 0),  # (N,C,H,W) -> (N,num_class,C/num_class,H,W)
             name="rpn_cls_logit_reshape"
         )
-        cls_loss = X.softmax_output(
-            data=cls_logit_reshape,
-            label=cls_label,
-            multi_output=True,
-            normalization='valid',
-            use_ignore=True,
-            ignore_label=-1,
-            grad_scale=1.0 * scale_loss_shift,
-            name="rpn_cls_loss"
-        )
+
+        cls_loss = None
+        if p.use_groupsoftmax:
+            cls_loss = mx.sym.contrib.GroupSoftmaxOutput(
+                data=cls_logit_reshape,
+                label=cls_label,
+                group=rpn_groups,
+                multi_output=True,
+                normalization='valid',
+                use_ignore=True,
+                ignore_label=-1,
+                grad_scale=1.0 * scale_loss_shift,
+                name="rpn_cls_loss"
+            )
+        else:
+            cls_loss = X.softmax_output(
+                data=cls_logit_reshape,
+                label=cls_label,
+                multi_output=True,
+                normalization='valid',
+                use_ignore=True,
+                ignore_label=-1,
+                grad_scale=1.0 * scale_loss_shift,
+                name="rpn_cls_loss"
+            )
 
         # regression loss
         reg_loss = X.smooth_l1(
