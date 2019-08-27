@@ -24,7 +24,7 @@ GroupSoftmax交叉熵损失函数能够支持不同标注标准的数据集进�
 
 ### USAGE
 GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./config/groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py)中的GroupParam设置，下面举例说明用法。如果CCTSDB中同时标注了preson类别和3类交通标注，也即CCTSDB和COCO中都标注了person类别，则应该做出改动的地方有三个：
-- 1、RPN的分类任务应该由3分类修改为4分类，因为此时有4中情况，分别为：背景、前景1、前景2、前景3，其中前景1为COCO和CCTSDB中都标注了的person，前景2为COCO中的其他79个类别，前景3为CSTSDB中的3类交通标志。所以应该将GroupParam中的rpnvx信息，由原来的：
+- RPN的分类任务应该由3分类修改为4分类，因为此时有4中情况，分别为：背景、前景1、前景2、前景3，其中前景1为COCO和CCTSDB中都标注了的person，前景2为COCO中的其他79个类别，前景3为CSTSDB中的3类交通标志。所以应该将GroupParam中的rpnvx信息，由原来的：
     ```
     rpnv0 = np.array([0, 1, 2], dtype=np.float32)     # rpn 3 classes
     rpnv1 = np.array([0, 1, 0], dtype=np.float32)     # COCO benchmark
