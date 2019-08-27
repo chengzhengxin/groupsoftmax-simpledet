@@ -23,7 +23,41 @@ GroupSoftmax交叉熵损失函数能够支持不同标注标准的数据集进�
 ### [GroupSoftmax交叉熵损失函数详解见知乎](https://zhuanlan.zhihu.com/p/73162940)
 
 ### USAGE
-GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./config/groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py)中的GroupParam设置，下面举例说明用法。如果CCTSDB中同时标注了person类别和3类交通标注，也即CCTSDB和COCO中都标注了person类别，则应该做出改动的地方有三个：
+GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./config/groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py)中的GroupParam设置，下面举例说明用法。
+
+#### 样例1
+假设有3个数据集：数据集A、数据集B、数据集C，它们的标注细节情况如下：
+- 数据集A，标注了4个类别的id和box，分别为`{行人、公交车、非机动车、牛}`
+- 数据集B，标注了5个类别的id和box，分别为`{行人、公交车、电动车、自行车、狗}`，其中电动车和自动车，为数据集A中的非机动车类别拆分成的两个子类
+- 数据集C，标注6个类别的box信息，包括`{行人、公交车、电动车、自动车、狗、牛}`，但是没有标注出类别id信息
+
+考虑上述的3个数据集，我们能够定义一个最精细的6类检测任务，类别分别为`{行人、公交车、电动车、自行车、牛、狗}`，想要通过上述的3个数据集联合训练得到一个6分类的检测模型，应该修改RPN网络和Head网络中的分类数量，以及对应的group_id信息。对于某个数据集中未标注的类别，group_id为0，意味着等同于背景类，本质是某个类别未标注可以理解为将某个类别标注为背景。网络修改细节如下：
+
+- RPN网络：考虑如上分类情况，RPN应该为4分类任务，分别为：{ 背景、前景1、前景2、前景3 }。其中`前景1={行人、公交车、非机动车、电动车、自行车}`，`前景2={牛}`，`前景3={狗}`。需要特别说明的是，在数据集C中，因为所有类别（也就是所有前景）的box都标注出来了，但是没有细分类别id，所以在分类任务中的group_id信息都为1，也可以都为2，计算loss时所有group_id相等的类别会组合成一个新的组合类别，也即在数据集C中`{前景1、前景2、前景3}`会组成一个`前景group类别`共同计算loss和对应的梯度。
+    ```python
+    rpnvx = np.array([0, 1, 2, 3], dtype=np.float32)    # rpn 4 classes
+    rpnva = np.array([0, 1, 2, 0], dtype=np.float32)    # rpn group_id of DATASET A
+    rpnvb = np.array([0, 1, 0, 3], dtype=np.float32)    # rpn group_id of DATASET B
+    rpnvc = np.array([0, 1, 1, 1], dtype=np.float32)    # rpn group_id of DATASET C
+    ```
+- Head网络：如上所述，考虑背景最终为7分类任务，分别为`{背景(0)、行人(1)、公交车(2)、电动车(3)、自行车(4)、牛(5)、狗(6)}`。需要指出的是，在数据集A中，由于`{电动车、自行车}`是以`{非机动车}`的标准来标注的，所以这2个类别的group_id都为3，也可以都为4，这2个类别在计算loss时会发生组合。同理，在数据集C中由于没有细分类别id，所以6个类别的group_id都为1，计算loss时这6个类别会组合成一个新的类别。
+    ```python
+    boxvx = np.array([0,  1,  2,  3,  4,  5,  6], dtype=np.float32)     # box 7 classes
+    boxva = np.array([0,  1,  2,  3,  3,  5,  0], dtype=np.float32)     # box group_id of DATASET A
+    boxvb = np.array([0,  1,  2,  3,  4,  0,  6], dtype=np.float32)     # box group_id of DATASET B
+    boxvc = np.array([0,  1,  1,  1,  1,  1,  1], dtype=np.float32)     # box group_id of DATASET C
+    ```
+- 修改RPN网络的类别映射方法gtclass2rpn，将真实类别id映射为RPN网络中的类别
+    ```python
+    def gtclass2rpn(gtclass):
+        gtclass[gtclass < 5]  = 1       #前景1
+        gtclass[gtclass == 5] = 2       #前景2
+        gtclass[gtclass == 6] = 3       #前景3
+        return gtclass
+    ```
+
+#### 样例2
+如果CCTSDB中同时标注了person类别和3类交通标注，也即CCTSDB和COCO中都标注了person类别，则应该做出改动的地方有三个：
 - RPN的分类任务应该由3分类修改为4分类，因为此时有4种情况，分别为：{ 背景、前景1、前景2、前景3 }，其中`前景1`为COCO和CCTSDB中都标注了的person，`前景2`为COCO中的其他79个类别，`前景3`为CSTSDB中的3类交通标志。所以应该将GroupParam中的rpnvx信息，由原来的：
     ```python
     rpnv0 = np.array([0, 1, 2], dtype=np.float32)     # rpn 3 classes
