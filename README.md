@@ -23,15 +23,15 @@ GroupSoftmax交叉熵损失函数能够支持不同标注标准的数据集进�
 ### [GroupSoftmax交叉熵损失函数详解见知乎](https://zhuanlan.zhihu.com/p/73162940)
 
 ### USAGE
-GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./config/groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py)中的GroupParam设置，下面举例说明用法。如果CCTSDB中同时标注了preson类别和3类交通标注，也即CCTSDB和COCO中都标注了person类别，则应该做出改动的地方有三个：
-- RPN的分类任务应该由3分类修改为4分类，因为此时有4种情况，分别为：`背景、前景1、前景2、前景3`，其中`前景1`为COCO和CCTSDB中都标注了的person，`前景2`为COCO中的其他79个类别，`前景3`为CSTSDB中的3类交通标志。所以应该将GroupParam中的rpnvx信息，由原来的：
-    ```
+GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./config/groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py)中的GroupParam设置，下面举例说明用法。如果CCTSDB中同时标注了person类别和3类交通标注，也即CCTSDB和COCO中都标注了person类别，则应该做出改动的地方有三个：
+- RPN的分类任务应该由3分类修改为4分类，因为此时有4种情况，分别为：{ 背景、前景1、前景2、前景3 }，其中`前景1`为COCO和CCTSDB中都标注了的person，`前景2`为COCO中的其他79个类别，`前景3`为CSTSDB中的3类交通标志。所以应该将GroupParam中的rpnvx信息，由原来的：
+    ```python
     rpnv0 = np.array([0, 1, 2], dtype=np.float32)     # rpn 3 classes
     rpnv1 = np.array([0, 1, 0], dtype=np.float32)     # COCO benchmark
     rpnv2 = np.array([0, 0, 2], dtype=np.float32)     # CCTSDB benchmark
     ```
     修改为：
-    ```
+    ```python
     rpnv0 = np.array([0, 1, 2, 3], dtype=np.float32)     # rpn 4 classes
     rpnv1 = np.array([0, 1, 2, 0], dtype=np.float32)     # COCO benchmark
     rpnv2 = np.array([0, 1, 0, 3], dtype=np.float32)     # CCTSDB benchmark
@@ -39,7 +39,7 @@ GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./
     前景1在COCO和CCTSDB中都进行标注了。而前景3在COCO中未标注，所以前景3在COCO的样本中会与背景类组成一个group组类别。而前景2在CCTSDB中未标注，所以前景2在CCTSDB的样本中会与背景类组成一个group组类别。本质是某个类别未标注可以理解为将某个类别标注为背景。
 
 - 修改RPN网络的类别映射方法gtclass2rpn，原来是3分类网络，类别映射为：`{0 ==> 0, [1,2,...,80] ==> 1, [81,82,83] ==> 2}`。现在是4分类网络，类别映射应该修改为：`{0 ==> 0, 1 ==> 1, [2,3,...,80] ==> 2, [81,82,83] ==> 3}`。对应的gtclass2rpn方法应该由原来的：
-    ```
+    ```python
     def gtclass2rpn(gtclass):
         class_gap = 80
         gtclass[gtclass > class_gap] = -1
@@ -48,7 +48,7 @@ GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./
         return gtclass
     ```
     修改为：
-    ```
+    ```python
     def gtclass2rpn(gtclass):
         class_gap = 80
         gtclass[gtclass > class_gap] = -1
@@ -58,7 +58,7 @@ GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./
         return gtclass
     ```
 - 在Head网络中，跟原来唯一的区别是CCTSDB中标注了person类别，因为person类别在COCO中类别id为1，所以对应的，在CCTSDB的boxv2中，id为1的类别也由原来的0修改为1，因为已经标注了，不再与背景类0组成一个group进行训练。修改之后如下：
-    ```
+    ```python
     # box 83 classes
     boxv0 = np.array([0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, \
                           16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, \
