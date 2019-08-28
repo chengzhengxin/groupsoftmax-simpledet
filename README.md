@@ -1,46 +1,48 @@
 # GroupSoftmax-SimpleDet
 ![](./doc/image/demo83.jpg)
-
-|Model|Backbone|Head|GroupSoftmax|Num Classes|Train Schedule|FP16|AP|AP50|AP75|APs|APm|APl|Link|
-|-----|--------|----|------------|-----------|--------------|----|--|----|----|---|---|---|----|
-|Faster-SyncBN|R101v2-C4|C5-256ROI|no|80|1X|no|38.6|-|-|-|-|-|[model](https://simpledet-model.oss-cn-beijing.aliyuncs.com/faster_r101v2c4_c5_256roi_syncbn_1x.zip)|
-|Faster-SyncBN|R101v2-C4|C5-256ROI|yes|83|1X|yes|39.3|59.9|42.3|21.0|44.1|53.3|-|
-|Trident*|R101v2-C4|C5-128ROI|yes|83|1X|yes|44.0|64.9|48.4|29.0|47.8|57.6|-|
-
 ---
 ## GroupSoftmax Cross Entropy Loss Function
 GroupSoftmax cross entropy loss function is implemented for training with multiple different benchmark datasets. We trained a 83 classes detection model by using COCO and CCTSDB.
 
 ---
 ## GroupSoftmax交叉熵损失函数
-GroupSoftmax交叉熵损失函数能够支持不同标注标准的数据集进行联合训练，在工业界的实际生产环境中，能够有效解决下面四个问题
+在工业界的实际生产环境中，经常会面临如下四个问题：
 - 在不重新标注原有数据的情况下，对新的标注数据，增加某些新的类别
 - 在不重新标注原有数据的情况下，对新的标注数据，修改原有的类别标准，比如将某个类别拆分成新的几个类别
 - 已标注数据集中，出现概率较高的类别一般属于简单样本，对新的数据只标注出现概率较低的类别，能够显著降低标注成本
 - 在标注大型目标检测数据集时，只标注矩形框，而不选择类别属性，能够有效降低标注成本
 
-我们利用GroupSoftmax交叉熵损失函数在COCO和CCTSDB数据集上进行了联合训练，得到了一个83类检测器。有趣的是，模型不仅有83类检测效果，在coco_minival2014测试集上的表现比原来80类检测器反而会好一些。也就是说我们利用了一个与COCO无关的CCTSDB数据集，在相同参数下，Faster RCNN算法的检测效果由原来的38.6提高到了39.3，提高了0.7个点。为了验证GroupSoftmax交叉熵损失函数的有效性，我们同时训练了一个83类Trident*模型，最后在coco_minival2014测试集上mAP指标为44.0，所以从理论上而言，利用GroupSoftmax交叉熵损失函数，你可以无限添加不同标注标准的数据集，进行联合训练。
-### [GroupSoftmax交叉熵损失函数详解见知乎](https://zhuanlan.zhihu.com/p/73162940)
+为了解决上述四个问题，我们提出了 **_GroupSoftmax_** 交叉熵损失函数，如下图所示，与 **_Softmax_** 交叉熵损失函数相比， **_GroupSoftmax_** 交叉熵损失函数允许类别 **_K_** 和类别 **_j_** 发生合并，形成一个新的组合类别 **_g_** ，当训练样本 **_y_** 的真实标签为组合类别 **_g_** 时，也能够计算出类别 **_K_** 和类别 **_j_** 的对应梯度，完成网络权重更新。理论上， **_GroupSoftmax_** 交叉熵损失函数能够兼容任意数量、任意标注标准的多个数据集联合训练。
+![](./doc/image/groupsoftmax.png)
+
+![Softmax](./doc/image/loss1.png) **VS** ![GroupSoftmax](./doc/image/loss2.png)
+
+从公式也可以看出， **_GroupSoftmax_** 损失函数是 **_Softmax_** 损失函数的一种推广，一种更复杂也更加灵活的表达，可以自由的发生类别合并。当群组类别 **_g_** 中只包含 **_m_** 单独一个类别时， **_GroupSoftmax_** 损失函数退化为 **_Softmax_** 损失函数。为了验证 **_GroupSoftmax_** 交叉熵损失函数的有效性，我们利用 **_GroupSoftmax_** 交叉熵损失函数在COCO和CCTSDB数据集上进行了联合训练，得到了一个83类检测器。有趣的是，模型不仅有83类检测效果，在coco_minival2014测试集上的表现比原来80类检测器反而会好一些。也就是说我们利用了一个与COCO无关的CCTSDB数据集，在相同参数下，Faster RCNN算法的检测效果由原来的38.6提高到了39.3，提高了0.7个点。我们同时训练了一个83类Trident*模型，6个epoch训练周期在coco_minival2014测试集上mAP指标为44.0，进一步验证了 **_GroupSoftmax_** 交叉熵损失函数的有效性。从理论上而言， **_GroupSoftmax_** 交叉熵损失函数能够支持任意标注标准的数据集进行联合训练。
+|Model|Backbone|Head|GroupSoftmax|Num Classes|Train Schedule|FP16|AP|AP50|AP75|APs|APm|APl|Link|
+|-----|--------|----|------------|-----------|--------------|----|--|----|----|---|---|---|----|
+|Faster-SyncBN|R101v2-C4|C5-256ROI|no|80|1X|no|38.6|-|-|-|-|-|[model](https://simpledet-model.oss-cn-beijing.aliyuncs.com/faster_r101v2c4_c5_256roi_syncbn_1x.zip)|
+|Faster-SyncBN|R101v2-C4|C5-256ROI|yes|83|1X|yes|39.3|59.9|42.3|21.0|44.1|53.3|-|
+|Trident*|R101v2-C4|C5-128ROI|yes|83|1X|yes|44.0|64.9|48.4|29.0|47.8|57.6|-|
 
 ### USAGE
-GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./config/groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py)中的GroupParam设置，下面举例说明用法。
+ **_GroupSoftmax_** 用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./config/groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py)中的GroupParam设置，下面举例说明用法。
 
 #### 样例1
-假设有3个数据集：数据集A、数据集B、数据集C，它们的标注细节情况如下：
-- 数据集A，标注了4个类别的id和box，分别为`{行人、公交车、非机动车、牛}`
-- 数据集B，标注了5个类别的id和box，分别为`{行人、公交车、电动车、自行车、狗}`，其中电动车和自动车，为数据集A中的非机动车类别拆分成的两个子类
-- 数据集C，标注6个类别的box信息，包括`{行人、公交车、电动车、自动车、狗、牛}`，但是没有标注出类别id信息
+假设有3个数据集：**数据集A、数据集B、数据集C**，它们的标注细节情况如下：
+- **数据集A**，标注了4个类别的cls和box，分别为 **{行人、公交车、非机动车、牛}**
+- **数据集B**，标注了5个类别的cls和box，分别为 **{行人、公交车、电动车、自行车、狗}** ，其中电动车和自动车，为数据集A中的非机动车类别拆分成的两个子类
+- **数据集C**，标注6个类别的box，包括 **{行人、公交车、电动车、自动车、狗、牛}**，但是没有标注出类别cls信息
 
-考虑上述的3个数据集，我们能够定义一个最精细的6类检测任务，类别分别为`{行人、公交车、电动车、自行车、牛、狗}`，想要通过上述的3个数据集联合训练得到一个6分类的检测模型，应该修改RPN网络和Head网络中的分类数量，以及对应的group_id信息。对于某个数据集中未标注的类别，group_id为0，意味着等同于背景类，本质是某个类别未标注可以理解为将某个类别标注为背景。网络修改细节如下：
+考虑上述的3个数据集，我们能够定义一个最精细的6类检测任务，类别分别为 **{行人、公交车、电动车、自行车、牛、狗}** ，想要通过上述的3个数据集联合训练得到一个6分类的检测模型，应该修改RPN网络和Head网络中的分类数量，以及对应的group_id信息。对于某个数据集中未标注的类别，group_id为0，意味着等同于背景类，本质是某个类别未标注可以理解为将某个类别标注为背景。网络修改细节如下：
 
-- RPN网络：考虑如上分类情况，RPN应该为4分类任务，分别为：{ 背景、前景1、前景2、前景3 }。其中`前景1={行人、公交车、非机动车、电动车、自行车}`，`前景2={牛}`，`前景3={狗}`。需要特别说明的是，在数据集C中，因为所有类别（也就是所有前景）的box都标注出来了，但是没有细分类别id，所以在分类任务中的group_id信息都为1，也可以都为2，计算loss时所有group_id相等的类别会组合成一个新的组合类别，也即在数据集C中`{前景1、前景2、前景3}`会组成一个`前景group类别`共同计算loss和对应的梯度。
+- RPN网络：考虑如上分类情况，RPN应该为4分类任务，分别为：{ 背景、前景1、前景2、前景3 }。其中 **前景1={行人、公交车、非机动车、电动车、自行车}，前景2={牛}，前景3={狗}**。需要特别说明的是，在数据集C中，因为所有类别（也就是所有前景）的box都标注出来了，但是没有细分类别id，所以在分类任务中的group_id信息都为1，也可以都为2，计算loss时所有group_id相等的类别会组合成一个新的组合类别，也即在数据集C中 **{前景1、前景2、前景3}** 会组成一个 **前景group类别** 共同计算loss和对应的梯度。
     ```python
     rpnvx = np.array([0, 1, 2, 3], dtype=np.float32)    # rpn 4 classes
     rpnva = np.array([0, 1, 2, 0], dtype=np.float32)    # rpn group_id of DATASET A
     rpnvb = np.array([0, 1, 0, 3], dtype=np.float32)    # rpn group_id of DATASET B
     rpnvc = np.array([0, 1, 1, 1], dtype=np.float32)    # rpn group_id of DATASET C
     ```
-- Head网络：如上所述，考虑背景最终为7分类任务，分别为`{背景(0)、行人(1)、公交车(2)、电动车(3)、自行车(4)、牛(5)、狗(6)}`。需要指出的是，在数据集A中，由于`{电动车、自行车}`是以`{非机动车}`的标准来标注的，所以这2个类别的group_id都为3，也可以都为4，这2个类别在计算loss时会发生组合。同理，在数据集C中由于没有细分类别id，所以6个类别的group_id都为1，计算loss时这6个类别会组合成一个新的类别。
+- Head网络：如上所述，考虑背景最终为7分类任务，分别为 **{背景(0)、行人(1)、公交车(2)、电动车(3)、自行车(4)、牛(5)、狗(6)}** 。需要指出的是，在数据集A中，由于 **{电动车、自行车}** 是以 **{非机动车}** 的标准来标注的，所以这2个类别的group_id都为3，也可以都为4，这2个类别在计算loss时会发生组合。同理，在数据集C中由于没有细分类别id，所以6个类别的group_id都为1，计算loss时这6个类别会组合成一个新的类别。
     ```python
     boxvx = np.array([0,  1,  2,  3,  4,  5,  6], dtype=np.float32)     # box 7 classes
     boxva = np.array([0,  1,  2,  3,  3,  5,  0], dtype=np.float32)     # box group_id of DATASET A
@@ -58,7 +60,7 @@ GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./
 
 #### 样例2
 如果CCTSDB中同时标注了person类别和3类交通标注，也即CCTSDB和COCO中都标注了person类别，则应该做出改动的地方有三个：
-- RPN的分类任务应该由3分类修改为4分类，因为此时有4种情况，分别为：{ 背景、前景1、前景2、前景3 }，其中`前景1`为COCO和CCTSDB中都标注了的person，`前景2`为COCO中的其他79个类别，`前景3`为CSTSDB中的3类交通标志。所以应该将GroupParam中的rpnvx信息，由原来的：
+- RPN的分类任务应该由3分类修改为4分类，因为此时有4种情况，分别为： **{ 背景、前景1、前景2、前景3 }** ，其中 **前景1** 为COCO和CCTSDB中都标注了的person， **前景2** 为COCO中的其他79个类别， **前景3** 为CSTSDB中的3类交通标志。所以应该将GroupParam中的rpnvx信息，由原来的：
     ```python
     rpnv0 = np.array([0, 1, 2], dtype=np.float32)     # rpn 3 classes
     rpnv1 = np.array([0, 1, 0], dtype=np.float32)     # COCO benchmark
@@ -72,7 +74,7 @@ GroupSoftmax用法参考[groupsoftmax_faster_r101v2c4_c5_256roi_syncbn_1x.py](./
     ```
     前景1在COCO和CCTSDB中都进行标注了。而前景3在COCO中未标注，所以前景3在COCO的样本中会与背景类组成一个group组类别。而前景2在CCTSDB中未标注，所以前景2在CCTSDB的样本中会与背景类组成一个group组类别。本质是某个类别未标注可以理解为将某个类别标注为背景。
 
-- 修改RPN网络的类别映射方法gtclass2rpn，原来是3分类网络，类别映射为：`{0 ==> 0, [1,2,...,80] ==> 1, [81,82,83] ==> 2}`。现在是4分类网络，类别映射应该修改为：`{0 ==> 0, 1 ==> 1, [2,3,...,80] ==> 2, [81,82,83] ==> 3}`。对应的gtclass2rpn方法应该由原来的：
+- 修改RPN网络的类别映射方法gtclass2rpn，原来是3分类网络，类别映射为： **{0 ==> 0, [1,2,...,80] ==> 1, [81,82,83] ==> 2}** 。现在是4分类网络，类别映射应该修改为： **{0 ==> 0, 1 ==> 1, [2,3,...,80] ==> 2, [81,82,83] ==> 3}** 。对应的gtclass2rpn方法应该由原来的：
     ```python
     def gtclass2rpn(gtclass):
         class_gap = 80
