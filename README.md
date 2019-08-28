@@ -15,9 +15,10 @@ GroupSoftmax cross entropy loss function is implemented for training with multip
 为了解决上述四个问题，我们提出了 **_GroupSoftmax_** 交叉熵损失函数，如下图所示，与 **_Softmax_** 交叉熵损失函数相比， **_GroupSoftmax_** 交叉熵损失函数允许类别 **_K_** 和类别 **_j_** 发生合并，形成一个新的组合类别 **_g_** ，当训练样本 **_y_** 的真实标签为组合类别 **_g_** 时，也能够计算出类别 **_K_** 和类别 **_j_** 的对应梯度，完成网络权重更新。理论上， **_GroupSoftmax_** 交叉熵损失函数能够兼容任意数量、任意标注标准的多个数据集联合训练。
 ![](./doc/image/groupsoftmax.png)
 
-![Softmax](./doc/image/loss1.png) **VS** ![GroupSoftmax](./doc/image/loss2.png)
+![Softmax](./doc/image/loss1.png)    ![GroupSoftmax](./doc/image/loss2.png)
 
 从公式也可以看出， **_GroupSoftmax_** 损失函数是 **_Softmax_** 损失函数的一种推广，一种更复杂也更加灵活的表达，可以自由的发生类别合并。当群组类别 **_g_** 中只包含 **_m_** 单独一个类别时， **_GroupSoftmax_** 损失函数退化为 **_Softmax_** 损失函数。为了验证 **_GroupSoftmax_** 交叉熵损失函数的有效性，我们利用 **_GroupSoftmax_** 交叉熵损失函数在COCO和CCTSDB数据集上进行了联合训练，得到了一个83类检测器。有趣的是，模型不仅有83类检测效果，在coco_minival2014测试集上的表现比原来80类检测器反而会好一些。也就是说我们利用了一个与COCO无关的CCTSDB数据集，在相同参数下，Faster RCNN算法的检测效果由原来的38.6提高到了39.3，提高了0.7个点。我们同时训练了一个83类Trident*模型，6个epoch训练周期在coco_minival2014测试集上mAP指标为44.0，进一步验证了 **_GroupSoftmax_** 交叉熵损失函数的有效性。从理论上而言， **_GroupSoftmax_** 交叉熵损失函数能够支持任意标注标准的数据集进行联合训练。
+
 |Model|Backbone|Head|GroupSoftmax|Num Classes|Train Schedule|FP16|AP|AP50|AP75|APs|APm|APl|Link|
 |-----|--------|----|------------|-----------|--------------|----|--|----|----|---|---|---|----|
 |Faster-SyncBN|R101v2-C4|C5-256ROI|no|80|1X|no|38.6|-|-|-|-|-|[model](https://simpledet-model.oss-cn-beijing.aliyuncs.com/faster_r101v2c4_c5_256roi_syncbn_1x.zip)|
